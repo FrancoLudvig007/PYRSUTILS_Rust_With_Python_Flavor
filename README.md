@@ -1,105 +1,128 @@
 # pyrs-utils — Biblioteca de utils Rust com sintaxe próxima ao Python
 
-> Documento de **planejamento**. Nada aqui está implementado ainda (exceto `input()`/`try_input()`). O objetivo é reduzir boilerplate do Rust e aproximar a sintaxe do Python, mantendo performance e segurança de memória do Rust.
+> Arquivo único `pyrsutils.rs` (v1.3.1), só `std`, sem dependências. Reduz boilerplate do Rust e aproxima a sintaxe do Python, mantendo performance e segurança de memória.
+>
+> Uso: `mod pyrsutils; use pyrsutils::prelude::*;`
 
 ---
 
-## ✅ Já implementado
+## ✅ Implementado
 
-### `input()` / `try_input()` / macros `input!` / `try_input!`
-- `input::<T>(prompt) -> T` — genérico sobre `FromStr`, dá panic em EOF/parse inválido (equivalente a exceção Python não tratada).
-- `try_input::<T>(prompt) -> Result<T, InputError<T::Err>>` — versão sem panic.
-- **Não será alterado.**
-
----
-
-## 📋 Planejado — Sequências e iteração
-
-| Função | Assinatura (planejada) | Equivalente Python |
+### Entrada
+| Item | Assinatura | Python |
 |---|---|---|
-| `range` | `range(stop)` / `range(start, stop)` / `range(start, stop, step)` — suporta step negativo | `range()` |
-| `enumerate_from` | `enumerate_from(iter, start)` | `enumerate(iter, start)` |
-| `zip_longest` | `zip_longest(a, b, fill)` | `itertools.zip_longest` |
+| `input` | `input::<T>(prompt) -> T` (`T: FromStr`; panic em EOF/parse inválido) | `input()` |
+| `try_input` | `try_input::<T>(prompt) -> Result<T, InputError<T::Err>>` | `try/except` |
+| `input!` / `try_input!` | macros equivalentes, `()` ou `(prompt)` | — |
 
----
+**Não será alterado.**
 
-## 📋 Planejado — Listas, Arrays e Matrizes
-
-| Função/Método | Assinatura (planejada) | Equivalente Python |
+### Sequências (`range_utils`)
+| Item | Assinatura | Python |
 |---|---|---|
-| `append` | `lista.append(valor)` | `list.append()` |
-| `pop` | `lista.pop()` / `lista.pop(indice)` | `list.pop()` |
-| `insert` | `lista.insert(indice, valor)` | `list.insert()` |
-| `remove` | `lista.remove(valor)` | `list.remove()` |
-| `matrix` | `matrix(linhas, colunas, valor_padrao)` | lista de listas `[[0]*c for _ in range(l)]` |
-| `matrix.get/set` | `m.get(i, j)` / `m.set(i, j, valor)` | `m[i][j]` |
-| `transpose` | `m.transpose()` | `zip(*m)` / numpy `.T` |
-| `flatten` | `flatten(matriz)` | lista comprehension aninhada |
-| `list!` (macro) | `list![x*2 for x in 0..10 if x % 2 == 0]` | list comprehension |
-| `dict!` / `set!` (macros) | açúcar sintático para `HashMap`/`HashSet` | `{}` / `set()` |
+| `range` | `range(stop)` | `range(stop)` |
+| `range_from` | `range_from(start, stop)` | `range(start, stop)` |
+| `range_step` | `range_step(start, stop, step)` — step negativo ok; panic se `step == 0` | `range(a, b, c)` |
 
----
+`PyRange` é `Iterator` + `ExactSizeIterator` + `PyLen` (`len(&range(10))` em O(1), sem alocar).
 
-## 📋 Planejado — Built-ins gerais
-
-| Função | Assinatura (planejada) | Equivalente Python |
+### Listas (`list_utils`, trait `PyList` sobre `Vec<T>`)
+| Item | Assinatura | Python |
 |---|---|---|
-| `len` | `len(x)` — genérico (str, Vec, slice, HashMap) | `len()` |
-| `min` / `max` | `min(iter)` / `max(iter)` | `min()` / `max()` |
-| `sorted` | `sorted(iter) -> Vec` (não consome/muta original) | `sorted()` |
-| `reversed` | `reversed(iter)` | `reversed()` |
-| `type_of` | `type_of(x) -> &str` (via `std::any::type_name`, uso em debug apenas) | `type()` |
+| `append_item` | `v.append_item(x)` (evita conflito com `Vec::append`) | `list.append()` |
+| `pop_at` | `v.pop_at(None)` / `v.pop_at(Some(i))` → `Option<T>` | `list.pop()` / `list.pop(i)` |
+| `remove_value` | `v.remove_value(&x) -> bool` (por valor) | `list.remove()` |
+| `insert` | nativo `Vec::insert(i, x)` (mesma ordem do Python) | `list.insert()` |
 
----
+### Matriz (`matrix_utils`)
+| Item | Assinatura | Python |
+|---|---|---|
+| `Matrix::new` | `Matrix::new(linhas, colunas, valor)` — armazenamento contíguo | `[[v]*c for _ in range(l)]` |
+| `m[(i, j)]` | `Index`/`IndexMut` (leitura e escrita) | `m[i][j]` |
+| `get` | `m.get(i, j) -> Option<&T>` | `m[i][j]` com `IndexError` |
+| `transpose` | `m.transpose() -> Matrix<T>` | `zip(*m)` |
+| `flatten` | `m.flatten() -> Vec<T>` (consome) | comprehension aninhada |
 
-## 📋 Planejado — Módulo de aritmética (estilo Python, documentação uniforme)
+### Built-ins (`builtins`)
+| Item | Assinatura | Python |
+|---|---|---|
+| `len` | `len(&x)` via `PyLen` (`str` conta chars, `[T]`, `HashMap`, `PyRange`) | `len()` |
+| `min` / `max` | `-> Option<T>` (`None` se vazio) | `min()` / `max()` |
+| `sorted` | `sorted(iter) -> Vec<T>` (panic em `NaN`) | `sorted()` |
+| `reversed` | iterador lazy | `reversed()` |
+| `type_of` | `type_of(&x) -> &'static str` (só debug) | `type()` |
 
-Cada função documentada no mesmo padrão: descrição curta, tipo genérico aceito, comportamento em overflow/divisão por zero.
-
-| Função | Assinatura (planejada) | Equivalente Python |
+### Aritmética (`arithmetic`, trait `NumeroPy`: `i8..i128`, `u8..u128`, `f32`, `f64`)
+| Item | Assinatura | Python |
 |---|---|---|
 | `sum` | `sum(iter) -> T` | `sum()` |
-| `sub` | `sub(iter) -> T` (subtração sequencial) | — (não existe built-in, mas comum pedir) |
-| `mult` | `mult(iter) -> T` (produtório) | `math.prod()` |
-| `div` | `div(a, b) -> Result<T, DivError>` (protege divisão por zero) | `a / b` (com `ZeroDivisionError`) |
-| `pow` | `pow(base, expoente) -> T` | `**` / `pow()` |
-| `root` | `root(x, n) -> f64` (raiz n-ésima; caso especial `sqrt`) | `x ** (1/n)` / `math.sqrt()` |
-| `min` / `max` | *(já listados acima, mas fazem parte do mesmo módulo conceitual)* | `min()` / `max()` |
+| `sub` | `sub(iter) -> Option<T>` (subtração sequencial) | — |
+| `mult` | `mult(iter) -> T` | `math.prod()` |
+| `div` | `div(a, b) -> Result<T, ArithError>` (`DivisaoPorZero`) | `a / b` |
+| `pow` | `pow(base, expoente: u32) -> T` (sem checagem de overflow) | `**` |
+| `root` | `root(x, indice) -> Result<f64, ArithError>` (`RaizDeNegativoComIndicePar`) | `math.sqrt()` / `x ** (1/n)` |
 
-> Nota: `div`, `pow` e `root` precisam decidir explicitamente o comportamento de erro (overflow, divisão por zero, raiz negativa de índice par) — em Rust isso não deve dar panic silencioso, e sim `Result` ou variante documentada, diferente do runtime error do Python.
-
----
-
-## 📋 Planejado — Strings
-
-| Função | Assinatura (planejada) | Equivalente Python |
+### Strings (`string_utils`)
+| Item | Assinatura | Python |
 |---|---|---|
 | `split` | `split(s, sep) -> Vec<&str>` | `str.split()` |
 | `strip` | `strip(s) -> &str` | `str.strip()` |
-| `join` | `join(sep, iter) -> String` | `sep.join(iter)` |
+| `join` | `join(sep, iter) -> String` | `sep.join()` |
+
+### Classes (macro `class!`)
+```rust
+class! {
+    struct Contador { valor: i32 }
+    impl {
+        fn incrementar(&mut self) { self.valor += 1; }
+    }
+}
+let mut c = Contador::new(0);
+```
+Gera `struct` + `impl` + `new()` automático. Limitações: tudo `pub`; deriva `Debug + Clone`; sem herança.
+
+### Tempo (`time_utils`, v1.1 — só UTC)
+| Item | Python |
+|---|---|
+| `time`, `sleep`, `perf_counter`, `perf_counter_ns` | `time.time/sleep/perf_counter(_ns)` |
+| `timeit`, `timeit_repeat`, macro `timeit!` | `timeit.timeit/repeat` |
+| `gmtime`, `gmtime_now`, `mktime_utc`, `StructTime` | `time.gmtime`, `calendar.timegm` |
+| `strftime` (`%Y %y %m %d %H %M %S %I %p %j %a %A %b %B %Z %F %T %%`) | `time.strftime` |
+
+### Rede (`net_utils`, v1.1 — só `std::net`, bloqueante)
+| Item | Python |
+|---|---|
+| `TcpClient` (`connect`, `connect_timeout`, `send`, `recv`, `recv_into`, `recv_exact`, `recv_string`, `set_timeout`, `set_nodelay`, `peer_addr`, `local_addr`, `close`) | `socket` TCP cliente |
+| `TcpServer` (`listen`, `accept`, `incoming`, `local_addr`) | `bind` + `listen` + `accept` |
+| `UdpSock` (`bind`, `send_to`, `recv_from`, `recv_from_into`, `set_timeout`, `local_addr`) | `SOCK_DGRAM` |
+| `gethostbyname`, `getaddrinfo` | `socket.gethostbyname/getaddrinfo` |
+
+### Sistema de arquivos (`fs_utils`, v1.2 — `AsRef<Path>`, `io::Result`)
+| Item | Python |
+|---|---|
+| `exists`, `isfile`, `isdir`, `islink` | `os.path.*` |
+| `listdir`, `mkdir`, `makedirs`, `remove`, `rmdir`, `rmtree`, `rename`, `copy` | `os`, `shutil` |
+| `getcwd`, `chdir` | `os.getcwd/chdir` |
+| `join_path`, `basename`, `dirname`, `splitext`, `abspath`, `realpath`, `expanduser` | `os.path.*` |
+| `walk` (iterador lazy) | `os.walk` |
+| `glob` (só `*` e `?`, sem `**`) | `glob.glob` |
+| `stat`, `chmod`, `symlink` (`#[cfg(unix)]`), `readlink` | `os.stat/chmod/symlink/readlink` |
 
 ---
 
-## 📋 Planejado — Orientação a objetos (`class!` macro, estilo C++)
+## 📋 Ainda planejado (não implementado)
 
-- Macro procedural `class! { Nome { campos...; métodos... } }` que expande internamente para `struct` + `impl` (sintaxe única, sem separar declaração de implementação).
-- Construtor implícito gerado a partir dos campos (`new()` automático).
-- **Herança**: não existe herança de dados nativa em Rust (design intencional). Planejar:
-  - Composição + `Deref`/`DerefMut` para simular acesso herdado a campos.
-  - `trait` com métodos default para herança de comportamento.
-  - Palavra-chave `extends` no macro, expandindo para composição + delegação automática.
-- **Polimorfismo**: via `dyn Trait` ou genéricos `impl Trait`; o macro pode gerar automaticamente o `trait` correspondente aos métodos públicos declarados.
-- ⚠️ Ponto de atenção: essa é a parte de maior custo de implementação (macro procedural, não `macro_rules!`) e a que mais tensiona com "zero-cost abstraction" se malfeita (vtable/indireção onde Rust normalmente evita).
+| Item | Assinatura planejada | Python |
+|---|---|---|
+| `enumerate_from` | `enumerate_from(iter, start)` | `enumerate(iter, start)` |
+| `zip_longest` | `zip_longest(a, b, fill)` | `itertools.zip_longest` |
+| `list!` | `list![x*2 for x in 0..10 if x % 2 == 0]` | list comprehension |
+| `dict!` / `set!` | açúcar sintático para `HashMap`/`HashSet` | `{}` / `set()` |
+| `class!` com `extends` | composição + `Deref`/`DerefMut` + delegação automática; trait com métodos default | herança |
+| `class!` polimorfismo | geração automática de `trait` dos métodos públicos (`dyn Trait` / `impl Trait`) | polimorfismo |
+
+⚠️ `extends`/polimorfismo exigem macro procedural (não `macro_rules!`) e é onde mais há risco de custo (vtable/indireção) contra o princípio de zero-cost.
 
 ---
 
-## 🗂 Ordem sugerida de implementação (a discutir)
-
-1. Built-ins simples (`len`, `min`, `max`, `sorted`, `reversed`)
-2. `range` com/sem step
-3. Listas/arrays/matrizes (`append`, `pop`, `matrix`, `list!`)
-4. Módulo de aritmética (`sum`, `sub`, `mult`, `div`, `pow`, `root`)
-5. Strings
-6. `class!` macro (OOP estilo C++)
-
-*(Escopo de `hashlib`/criptografia e de `scapy`/redes foi descartado — fora do escopo desta biblioteca.)*
+*(Escopo de `hashlib`/criptografia e de `scapy`/redes avançadas foi descartado — fora do escopo desta biblioteca.)*
